@@ -30,7 +30,7 @@ class JPLData(requests.Session):
         self.get(self.TYPES[source])
 
     def requested_files_regex(self, tiles, file_types):
-        regex = '(' + '|'.join(tiles) + ').*(' + '|'.join(file_types) + ')$'
+        regex = '(' + '|'.join(tiles) + ').*(' + '|'.join(file_types) + ')'
         return re.compile(self.FILE_BASE_REGEX + regex, re.IGNORECASE)
 
     def __get_index_url(self, types, year, day):
@@ -38,7 +38,6 @@ class JPLData(requests.Session):
         if year < 2015:
             url += self.ARCHIVE_PATH
         url += '/' + str(year) + '/' + day + '/'
-
         return url
 
     def files_for_date_range(self, types, tiles, year, day_range, file_types):
@@ -54,12 +53,10 @@ class JPLData(requests.Session):
             ).find_all(
                 'a', text=self.requested_files_regex(tiles, file_types)
             )
-
             [
                 files.update({link.text: index_dir_url + link.attrs['href']})
                 for link in file_links
             ]
-
         return files
 
 
@@ -86,6 +83,11 @@ def parse_year(_ctx, _param, value):
     else:
         return range(2000, datetime.date.today().year + 1)
 
+def get_subtype_name (name):
+    indices = [i for i, x in enumerate(name) if x == "."]
+    extind = indices[len(indices)-1]
+    prevind = indices[len(indices)-2]+1
+    return name[prevind:extind]
 
 @click.command()
 @click.option('--username',
@@ -148,11 +150,20 @@ def data_download(**kwargs):
         )
 
         print('Found ' + str(len(file_list)) + ' files to download')
+
+        if ((len(file_list)>0) and (not os.path.exists(download_folder))):
+            os.mkdir(download_folder)
+
+        for filename in file_list.keys():
+            sub_download_folder = os.path.join(download_folder,get_subtype_name(filename))
+            if (not os.path.exists(sub_download_folder)):
+                os.mkdir(sub_download_folder)
+
         p = Pool(4)
         p_res = [
             p.apply_async(
                 get_from_jpl,
-                (kwargs['username'], kwargs['password'], name, url, download_folder)
+                (kwargs['username'], kwargs['password'], name, url, os.path.join(download_folder,get_subtype_name(name)))
             ) for name, url in file_list.items()
         ]
         [res.get() for res in p_res]
